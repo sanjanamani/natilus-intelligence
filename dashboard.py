@@ -70,15 +70,16 @@ with col1:
         help="Boeing/Spirit engineers actively looking"
     )
 
+# In the Series A metrics section, change:
 with col2:
     # Days to Series A close
-    series_a_target = datetime(2025, 2, 15)  # Estimate
+    series_a_target = datetime(2025, 3, 15)  # Updated for Series A
     days_left = (series_a_target - datetime.now()).days
     st.metric(
         "📅 Days to Series A Close",
         days_left,
-        "",
-        help="Estimated based on typical timeline"
+        "Target: $15-20M",  # Series A range
+        help="Currently in due diligence"
     )
 
 with col3:
