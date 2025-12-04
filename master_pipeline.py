@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from warn_tracker import WARNTracker
 from patent_tracker import PatentTracker
 from news_tracker import NewsTracker
-from github_scout import GitHubScout
+from github_scout import GithubScout
 from contract_tracker import ContractTracker
 
 load_dotenv()
@@ -26,7 +26,7 @@ class NatilusMasterPipeline:
         self.warn = WARNTracker()
         self.patents = PatentTracker()
         self.news = NewsTracker()
-        self.github = GitHubScout()
+        self.github = GithubScout()
         self.contracts = ContractTracker()
         
     def run_full_intelligence(self):

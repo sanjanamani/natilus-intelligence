@@ -83,7 +83,7 @@ def add_competitor_intelligence():
     ]
     
     try:
-        result = supabase.table('competitor_moves').insert(moves).execute()
+        result = supabase.table('competitor_news').insert(moves).execute()
         print(f"✅ Added {len(moves)} competitor updates")
     except Exception as e:
         print(f"❌ Error: {e}")

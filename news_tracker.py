@@ -109,7 +109,7 @@ class NewsTracker:
         if news:
             try:
                 for article in news:
-                    self.supabase.table('competitor_moves').insert(article).execute()
+                    self.supabase.table('competitor_news').insert(article).execute()
                 print(f"💾 Saved {len(news)} news items")
             except Exception as e:
                 print(f"❌ Database error: {e}")

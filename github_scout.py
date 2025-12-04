@@ -1,111 +1,122 @@
 # github_scout.py
-import requests
-import time
 import os
-from dotenv import load_dotenv
-from supabase import create_client
+import time
+from typing import Any, Dict, List, Optional
 
-load_dotenv()
+import requests
 
-class GitHubScout:
-    def __init__(self):
-        self.supabase = create_client(
-            os.getenv('SUPABASE_URL'),
-            os.getenv('SUPABASE_KEY')
-        )
-        # GitHub API allows 60 requests/hour without auth
-        self.headers = {
-            'Accept': 'application/vnd.github.v3+json'
-        }
-    
-    def find_aerospace_engineers(self):
-        """Find engineers with aerospace experience on GitHub"""
-        print("👨‍💻 Searching GitHub for aerospace engineers...")
-        
-        base_url = "https://api.github.com/search/users"
-        
-        # Search queries targeting aerospace engineers
-        queries = [
-            "Boeing location:Seattle aerospace",
-            "Spirit AeroSystems",
-            "composite materials aircraft",
-            "UAV autopilot",
-            "flight dynamics",
-            "CFD aerospace"
-        ]
-        
-        all_talent = []
-        
-        for query in queries:
-            params = {
-                'q': query,
-                'sort': 'followers',
-                'per_page': 5  # Keep it small to avoid rate limits
+from simple_db import SimpleSupabase
+
+
+GITHUB_API_URL = "https://api.github.com"
+
+
+class GithubScout:
+    def __init__(self) -> None:
+        self.db = SimpleSupabase()
+        self.token = os.getenv("GITHUB_TOKEN")
+
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "Accept": "application/vnd.github+json",
+                "User-Agent": "natilus-intelligence-github-scout",
             }
-            
+        )
+        if self.token:
+            self.session.headers["Authorization"] = f"Bearer {self.token}"
+
+        # These are the signals you care about for Natilus
+        self.search_queries: List[str] = [
+            "Boeing aerodynamic engineer",
+            "Spirit Aerosystems composite engineer",
+            "Airbus aero structures",
+            "electric aircraft aerospace engineer",
+        ]
+
+    def _search_users(self, query: str, per_page: int = 5) -> List[Dict[str, Any]]:
+        print(f"🔍 Searching GitHub: {query}")
+        params = {"q": query, "per_page": per_page}
+        resp = self.session.get(f"{GITHUB_API_URL}/search/users", params=params, timeout=20)
+
+        if resp.status_code == 403:
+            print("⚠️ GitHub rate limit or auth issue. Set GITHUB_TOKEN to increase limits.")
+            return []
+
+        if not resp.ok:
+            print(f"⚠️ GitHub search error {resp.status_code}: {resp.text}")
+            return []
+
+        data = resp.json()
+        return data.get("items", [])
+
+    def _fetch_user_details(self, login: str) -> Optional[Dict[str, Any]]:
+        resp = self.session.get(f"{GITHUB_API_URL}/users/{login}", timeout=20)
+        if not resp.ok:
+            print(f"⚠️ Failed to fetch details for {login}: {resp.status_code}")
+            return None
+        return resp.json()
+
+    def _build_talent_row(
+        self, user: Dict[str, Any], details: Dict[str, Any], source_query: str
+    ) -> Dict[str, Any]:
+        name = details.get("name") or user.get("login")
+        location = details.get("location") or ""
+        company = details.get("company") or ""
+
+        notes_parts = []
+        if source_query:
+            notes_parts.append(f"Found via GitHub search: '{source_query}'")
+        if details.get("bio"):
+            notes_parts.append(f"Bio: {details['bio'][:180]}")
+
+        notes = " | ".join(notes_parts)
+
+        return {
+            "name": name,
+            "current_company": company,
+            "location": location,
+            "github_login": user.get("login"),
+            "github_url": user.get("html_url"),
+            "notes": notes,
+            "priority_score": 85,  # default; you can tune this later
+            "is_open_to_work": True,  # you could infer from bio if you want
+        }
+
+    def run(self) -> List[Dict[str, Any]]:
+        all_talent: List[Dict[str, Any]] = []
+
+        for query in self.search_queries:
+            users = self._search_users(query)
+            for user in users:
+                login = user.get("login")
+                if not login:
+                    continue
+
+                details = self._fetch_user_details(login)
+                if not details:
+                    continue
+
+                row = self._build_talent_row(user, details, query)
+                print(f"✅ Found: {row['name']} at {row['current_company'] or 'Unknown'}")
+                all_talent.append(row)
+
+                # be gentle with the API
+                time.sleep(0.4)
+
+        # Save to Supabase
+        saved = 0
+        if all_talent:
             try:
-                response = requests.get(base_url, params=params, headers=self.headers)
-                
-                if response.status_code == 200:
-                    users = response.json().get('items', [])
-                    
-                    for user in users:
-                        # Get detailed profile
-                        time.sleep(1)  # Be nice to GitHub's API
-                        profile_response = requests.get(user['url'], headers=self.headers)
-                        
-                        if profile_response.status_code == 200:
-                            profile = profile_response.json()
-                            
-                            # Check if they're hireable or recently updated
-                            if profile.get('hireable') or profile.get('bio'):
-                                talent = {
-                                    'name': profile.get('name', user['login']),
-                                    'current_company': profile.get('company', 'Unknown'),
-                                    'location': profile.get('location', 'Unknown'),
-                                    'title': f"Engineer ({profile.get('bio', 'Aerospace')[:50]})" if profile.get('bio') else 'Software Engineer',
-                                    'linkedin_url': profile['html_url'],
-                                    'is_open_to_work': profile.get('hireable', False),
-                                    'skills': f"GitHub: {profile.get('public_repos', 0)} repos, {profile.get('followers', 0)} followers",
-                                    'priority_score': min(50 + profile.get('followers', 0), 95),
-                                    'notes': f"GitHub profile - {profile.get('bio', '')[:100]}"
-                                }
-                                
-                                all_talent.append(talent)
-                                print(f"✅ Found: {talent['name']} at {talent['current_company']}")
-                
-                elif response.status_code == 403:
-                    print("⚠️ GitHub API rate limit reached. Wait 1 hour.")
-                    break
-                    
+                saved = self.db.insert_rows("aerospace_talent", all_talent)
+                print(f"\n💾 Saved {saved} GitHub engineers to aerospace_talent")
             except Exception as e:
-                print(f"❌ Error searching GitHub: {e}")
-            
-            time.sleep(2)  # Pause between searches
-        
+                print(f"\n⚠️ Could not save to Supabase: {e}")
+
+        print(f"\n👨‍💻 Total GitHub talent found: {len(all_talent)}")
         return all_talent
-    
-    def save_to_database(self, talent):
-        """Save GitHub talent to database"""
-        if talent:
-            try:
-                for person in talent:
-                    # Use upsert to avoid duplicates
-                    self.supabase.table('aerospace_talent').upsert(
-                        person,
-                        on_conflict='name'
-                    ).execute()
-                print(f"💾 Saved {len(talent)} GitHub profiles")
-            except Exception as e:
-                print(f"❌ Database error: {e}")
-    
-    def run(self):
-        """Run GitHub talent search"""
-        talent = self.find_aerospace_engineers()
-        self.save_to_database(talent)
-        return talent
+
 
 if __name__ == "__main__":
-    scout = GitHubScout()
-    talent = scout.run()
-    print(f"\n👨‍💻 Total GitHub talent found: {len(talent)}")
+    scout = GithubScout()
+    scout.run()
