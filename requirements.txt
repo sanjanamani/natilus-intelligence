@@ -1,0 +1,30 @@
+# Natilus Intelligence Platform - Python 3.14 Compatible
+# Scrapers only - No dashboard dependencies
+
+# Core
+httpx>=0.27.0
+python-dateutil>=2.9.0
+python-dotenv>=1.0.0
+
+# Database
+supabase>=2.12.0
+
+# Web Scraping
+feedparser>=6.0.10
+sgmllib3k>=1.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.2
+lxml>=5.1.0
+
+# AI Analysis
+anthropic>=0.75.0
+
+# Financial Data
+alpha-vantage>=2.3.1
+
+# NLP
+textblob>=0.17.1
+
+# Data Export
+pandas>=2.1.0
+openpyxl>=3.1.0
